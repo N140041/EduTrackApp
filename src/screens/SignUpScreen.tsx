@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { BASE_URL } from './Common/constants';
 
@@ -8,9 +8,10 @@ const SignUpScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
   const [role, setRole] = useState(null);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   const [roles, setRoles] = useState([
     { label: 'Student', value: 'student' },
     { label: 'Teacher', value: 'teacher' },
@@ -29,8 +30,9 @@ const SignUpScreen = ({ navigation }) => {
       return;
     }
 
+    setLoading(true);
+
     const userData = { name, email, password, role };
-    console.log(JSON.stringify(userData));
 
     try {
       const response = await fetch(`${BASE_URL}/users/register`, {
@@ -40,7 +42,6 @@ const SignUpScreen = ({ navigation }) => {
       });
 
       const result = await response.json();
-      console.log(JSON.stringify(response));
 
       if (response.ok) {
         Alert.alert('Success', result.message || 'Account created successfully');
@@ -51,6 +52,8 @@ const SignUpScreen = ({ navigation }) => {
     } catch (error) {
       console.error('Error:', error);
       Alert.alert('Error', 'Network error, please try again later');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -102,8 +105,12 @@ const SignUpScreen = ({ navigation }) => {
           dropDownContainerStyle={styles.dropdownContainer}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-          <Text style={styles.buttonText}>Sign Up</Text>
+        <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Sign Up</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => navigation.navigate('Login')}>

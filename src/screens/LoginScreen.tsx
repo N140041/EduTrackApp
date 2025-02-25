@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from './Common/constants';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Check if a token exists and navigate to Home
   useEffect(() => {
@@ -28,6 +29,7 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
+    setLoading(true);
     const userData = { email, password };
 
     try {
@@ -53,6 +55,8 @@ const LoginScreen = ({ navigation }) => {
     } catch (error) {
       Alert.alert('Error', 'Network error. Please try again later.');
       console.error('Login Error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,8 +77,12 @@ const LoginScreen = ({ navigation }) => {
         value={password}
         onChangeText={setPassword}
       />
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Login</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>

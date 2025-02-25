@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TouchableOpacity, Text, Alert, Image, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Text, Alert, Image, StyleSheet, ActivityIndicator } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { BASE_URL } from './Common/constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,6 +11,7 @@ const CameraCaptureScreen = ({ route, navigation }) => {
     const cameraRef = useRef<Camera>(null);
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [isCameraActive, setIsCameraActive] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const { hasPermission, requestPermission } = useCameraPermission();
 
     // Request camera permissions on mount
@@ -65,6 +66,7 @@ const CameraCaptureScreen = ({ route, navigation }) => {
         });
 
         try {
+            setIsLoading(true);
             const response = await fetch(`${BASE_URL}/users/enroll-face`, {
                 method: 'POST',
                 headers: {
@@ -85,6 +87,8 @@ const CameraCaptureScreen = ({ route, navigation }) => {
         } catch (error) {
             console.error('Upload Error:', error);
             Alert.alert('Error', 'Network error, please try again later.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -109,9 +113,13 @@ const CameraCaptureScreen = ({ route, navigation }) => {
                     </TouchableOpacity>
                 ) : (
                     <>
-                        <TouchableOpacity style={styles.uploadButton} onPress={uploadPhoto}>
-                            <Text style={styles.buttonText}>Upload</Text>
-                        </TouchableOpacity>
+                        {isLoading ? (
+                            <ActivityIndicator size="large" color="#fff" />
+                        ) : (
+                            <TouchableOpacity style={styles.uploadButton} onPress={uploadPhoto}>
+                                <Text style={styles.buttonText}>Upload</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity style={styles.retakeButton} onPress={() => setIsCameraActive(true)}>
                             <Text style={styles.buttonText}>Retake</Text>
                         </TouchableOpacity>

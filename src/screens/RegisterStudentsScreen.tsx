@@ -17,6 +17,7 @@ let BEARER_TOKEN = ''; // Replace with your token
 const RegisterStudentsScreen = ({ navigation }) => {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [apiLoading, setApiLoading] = useState(false);
     const [hasPermission, setHasPermission] = useState(false);
 
     useEffect(() => {
@@ -55,6 +56,7 @@ const RegisterStudentsScreen = ({ navigation }) => {
     // Fetch Students from API
     const fetchStudents = async () => {
         try {
+            setApiLoading(true);
             const response = await fetch(`${BASE_URL}/users/students`, {
                 method: 'GET',
                 headers: {
@@ -73,6 +75,7 @@ const RegisterStudentsScreen = ({ navigation }) => {
             console.error('Error fetching students:', error);
             Alert.alert('Error', 'Failed to fetch students.');
         } finally {
+            setApiLoading(false);
             setLoading(false);
         }
     };
@@ -111,6 +114,12 @@ const RegisterStudentsScreen = ({ navigation }) => {
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Register Students</Text>
+            {apiLoading && (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="#007bff" />
+                    <Text>Updating...</Text>
+                </View>
+            )}
             <FlatList
                 data={students}
                 keyExtractor={(item) => item._id}
@@ -126,7 +135,7 @@ const RegisterStudentsScreen = ({ navigation }) => {
                             activeOpacity={0.7}
                         >
                             <Text style={styles.buttonText}>
-                                {item.isFaceSet ? 'Re-Register' : 'Register'}
+                                {item.isFaceSet ? 'Re-Enroll Face' : 'Enroll Face'}
                             </Text>
                         </TouchableOpacity>
                     </View>

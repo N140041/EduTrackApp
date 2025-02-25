@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, FlatList, Switch, StyleSheet, Pressable, Alert, Image, Platform } from 'react-native';
+import { View, Text, FlatList, Switch, StyleSheet, Pressable, Alert, Image, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { BASE_URL } from './Common/constants';
@@ -15,6 +15,7 @@ const AttendanceScreen = () => {
     const device = useCameraDevice('back');
     const cameraRef = useRef<Camera>(null);
     const { hasPermission, requestPermission } = useCameraPermission();
+     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         const checkAuthStatus = async () => {
@@ -42,6 +43,7 @@ const AttendanceScreen = () => {
     };
 
     const fetchStudents = async () => {
+        setLoading(true);
         try {
             const response = await fetch(`${BASE_URL}/users/students`, {
                 method: 'GET',
@@ -56,6 +58,8 @@ const AttendanceScreen = () => {
             setStudentsData(data);
         } catch (error) {
             Alert.alert('Error', 'Failed to fetch students.');
+        } finally{
+            setLoading(false);
         }
     };
 
@@ -90,7 +94,7 @@ const AttendanceScreen = () => {
             name: 'attendance.jpg',
             type: 'image/jpeg',
         });
-    
+        setLoading(true);
         try {
             const response = await fetch(`${BASE_URL}/attendance/getUsers`, {
                 method: 'POST',
@@ -114,63 +118,10 @@ const AttendanceScreen = () => {
         } catch (error) {
             console.error('Upload Error:', error);
             Alert.alert('Offline Mode', error.message || 'Network error, please try again later.');
+        } finally {
+            setLoading(false);
         }
     };
-
-    // const handleSubmit = () => {
-    //     const present = studentsData.filter((student) => attendance[student._id]);
-    //     const absent = studentsData.filter((student) => !attendance[student._id]);
-
-    //     if (present.length === 0 && absent.length === 0) {
-    //         Alert.alert('Error', 'Please mark attendance before submitting.');
-    //         return;
-    //     }
-
-    //     Alert.alert(
-    //         'Attendance Summary',
-    //         `✅ Present: ${present.map((s) => s.name).join(', ') || 'None'}\n❌ Absent: ${absent.map((s) => s.name).join(', ') || 'None'}`,
-    //         [{ text: 'OK' }]
-    //     );
-    // };
-
-    // const handleSubmit = async () => {
-    //     const present = studentsData.filter((student) => attendance[student._id]);
-    //     const absent = studentsData.filter((student) => !attendance[student._id]);
-    
-    //     if (present.length === 0 && absent.length === 0) {
-    //         Alert.alert('Error', 'Please mark attendance before submitting.');
-    //         return;
-    //     }
-    
-    //     // Prepare the payload for the backend
-    //     const payload = {
-    //         users: [
-    //             ...present.map((student) => ({ id: student._id, isPresent: "true" })),
-    //             ...absent.map((student) => ({ id: student._id, isPresent: "false" })),
-    //         ],
-    //     };
-    
-    //     try {
-    //         const response = await fetch('http://localhost:8000/api/attendance/mark', {
-    //             method: 'POST',
-    //             headers: {
-    //                 'Content-Type': 'application/json',
-    //             },
-    //             body: JSON.stringify(payload),
-    //         });
-    
-    //         const result = await response.json();
-    
-    //         if (response.ok) {
-    //             Alert.alert('Success', 'Attendance submitted successfully!');
-    //         } else {
-    //             throw new Error(result.message || 'Failed to submit attendance.');
-    //         }
-    //     } catch (error) {
-    //         console.error('Submit Error:', error);
-    //         Alert.alert('Error', 'Unable to submit attendance. Please try again.');
-    //     }
-    // };
 
     const handleSubmit = () => {
         const present = studentsData.filter((student) => attendance[student._id]);
@@ -198,6 +149,7 @@ const AttendanceScreen = () => {
                 {
                     text: 'Proceed',
                     onPress: async () => {
+                        setLoading(true);
                         try {
                             const response = await fetch(`${BASE_URL}/attendance/mark`, {
                                 method: 'POST',
@@ -222,6 +174,8 @@ const AttendanceScreen = () => {
                         } catch (error) {
                             console.error('Submit Error:', error);
                             Alert.alert('Error', error.message);
+                        } finally {
+                            setLoading(false);
                         }
                     },
                 },
@@ -283,6 +237,12 @@ const AttendanceScreen = () => {
                     </Pressable>
                 </>
             )}
+             {loading && (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="small" color="#007bff" />
+                                <Text>Updating...</Text>
+                            </View>
+                        )}
         </SafeAreaView>
     );
 };
@@ -357,6 +317,11 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 18,
         fontWeight: 'bold',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });
 
