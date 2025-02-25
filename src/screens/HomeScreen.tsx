@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from './Common/constants';
 
@@ -8,6 +8,7 @@ const HomeScreen = ({ navigation }) => {
   const [user, setUser] = useState({});
   const [loading, setLoading] = useState(false);
   const [studentsData, setStudentsData] = useState<any[]>([]);
+  const [attendanceData, setAttendanceData] = useState<any[]>([]);
 
   useEffect(() => {
     const checkAuthStatus = async () => {
@@ -19,7 +20,11 @@ const HomeScreen = ({ navigation }) => {
 
         const userData = await AsyncStorage.getItem('user');
         if (userData) {
-          setUser(JSON.parse(userData));
+          const data = JSON.parse(userData)
+          setUser(data);
+          if (data.role === 'student') {
+            getStudentAttendance()
+          }
         }
       } catch (error) {
         console.error('Error checking auth status:', error);
@@ -58,6 +63,27 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  const getStudentAttendance = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${BASE_URL}/attendance/studentHistory`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${BEARER_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch student attendance');
+      const data = await response.json();
+      setAttendanceData(data);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch student attendance.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const takeAttendance = async () => {
     setLoading(true);
     try {
@@ -72,7 +98,7 @@ const HomeScreen = ({ navigation }) => {
       if (!response.ok) throw new Error('Failed to fetch students');
       const data = await response.json();
       setStudentsData(data);
-      console.log('data',data)
+      console.log('data', data)
       if (data.length <= 0) {
         navigation.navigate('Attendance')
       } else {
@@ -88,7 +114,7 @@ const HomeScreen = ({ navigation }) => {
           .join(', ');
 
         Alert.alert(
-          'Attendance Summary',
+          'Today Attendance Summary',
           `✅ Present: ${presentList || 'None'}\n❌ Absent: ${absentList || 'None'}`
         );
 
@@ -102,29 +128,54 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}> Hello, {user.name}</Text>
-      <Text style={styles.title}>Role : {user.role}</Text>
-      <TouchableOpacity style={styles.button} onPress={() => takeAttendance()}>
-        <Text style={styles.buttonText}>Take Attendance</Text>
-      </TouchableOpacity>
+      <Text style={styles.title}>Hello, {user.name}</Text>
+      <Text style={styles.title}>Role: {user.role}</Text>
 
-      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('RegisterStudents')}>
-        <Text style={styles.buttonText}>Register Student For Biometric</Text>
-      </TouchableOpacity>
+      {user.role === 'student' ? (
+        <View>
+          <Text style={styles.infoText}>Attendance Record:</Text>
+          <FlatList
+            data={attendanceData}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.attendanceItem}>
+                <Text style={styles.dateText}>{item.date}</Text>
+                <Text
+                  style={[
+                    styles.statusText,
+                    { color: item.status.toLowerCase() === 'present' ? 'green' : 'red' },
+                  ]}
+                >
+                  {item.status}
+                </Text>
+              </View>
+            )}
+          />
+        </View>
+      ) : (
+        <>
+          <TouchableOpacity style={styles.button} onPress={takeAttendance}>
+            <Text style={styles.buttonText}>Take Attendance</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity style={styles.button} onPress={() => bulkUpload()}>
-        <Text style={styles.buttonText}>Student Bulk Register</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('RegisterStudents')}>
+            <Text style={styles.buttonText}>Register Student For Biometric</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.button} onPress={bulkUpload}>
+            <Text style={styles.buttonText}>Student Bulk Register</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
 
-      {loading && (
-          <ActivityIndicator size="small" color="#007bff" />
-      )}
+      {loading && <ActivityIndicator size="small" color="#007bff" />}
     </View>
   );
+
 };
 
 const styles = StyleSheet.create({
@@ -133,6 +184,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
+    alignContent:'center',
+    paddingTop: 60,
   },
   title: {
     fontSize: 24,
@@ -171,6 +224,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  infoText: {
+    fontSize: 18,
+    fontWeight: '500',
+    marginBottom: 10,
+  },
+  attendanceItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  dateText: {
+    fontSize: 16,
+    marginHorizontal:6
+  },
+  statusText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginHorizontal:6
   },
 });
 
