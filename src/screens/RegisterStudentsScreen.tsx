@@ -1,37 +1,84 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import {
+    View,
+    Text,
+    FlatList,
+    TouchableOpacity,
+    Alert,
+    StyleSheet,
+    ActivityIndicator
+} from 'react-native';
 import { Camera } from 'react-native-vision-camera';
+import { BASE_URL } from './Common/constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const studentsData = [
-    { id: 'S001', name: 'John Doe', registered: true },
-    { id: 'S002', name: 'Jane Smith', registered: false },
-    { id: 'S003', name: 'Alice Johnson', registered: true },
-    { id: 'S004', name: 'Bob Williams', registered: false },
-];
+let BEARER_TOKEN = ''; // Replace with your token
 
 const RegisterStudentsScreen = ({ navigation }) => {
-    const [students, setStudents] = useState(studentsData);
+    const [students, setStudents] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [hasPermission, setHasPermission] = useState(false);
 
     useEffect(() => {
+        const checkAuthStatus = async () => {
+            try {
+              const token = await AsyncStorage.getItem('authToken');
+              if (token) {
+                BEARER_TOKEN = token;
+                fetchStudents();
+              } else {
+                setLoading(false);
+              }
+            } catch (error) {
+              console.error('Error checking auth status:', error);
+                setLoading(false);
+            }
+          };
+        checkAuthStatus();
         requestCameraPermission();
     }, []);
 
+    // Request Camera Permission
     const requestCameraPermission = async () => {
         const status = await Camera.requestCameraPermission();
-        console.log(status)
         if (status === 'granted') {
             setHasPermission(true);
         } else {
             Alert.alert(
                 'Camera Permission Denied',
-                 'Camera access is required to register students. Please enable it in settings.',
+                'Camera access is required to register students. Please enable it in settings.',
                 [{ text: 'OK' }]
             );
         }
     };
 
-    const handleRegister = async (student) => {
+    // Fetch Students from API
+    const fetchStudents = async () => {
+        try {
+            const response = await fetch(`${BASE_URL}/users/students`, {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${BEARER_TOKEN}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch students');
+            }
+
+            const data = await response.json();
+            setStudents(data);
+        } catch (error) {
+            console.error('Error fetching students:', error);
+            Alert.alert('Error', 'Failed to fetch students.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Navigate to CameraCapture
+    const handleRegister = (student) => {
         if (!hasPermission) {
             Alert.alert('Permission Denied', 'Camera access is required to register students.');
             return;
@@ -39,33 +86,47 @@ const RegisterStudentsScreen = ({ navigation }) => {
 
         navigation.navigate('CameraCapture', {
             student,
-            onSuccess: () => markAsRegistered(student.id),
+            onSuccess: () => markAsRegistered(student._id),
         });
     };
 
+    // Mark student as registered
     const markAsRegistered = (studentId) => {
         setStudents((prevStudents) =>
             prevStudents.map((student) =>
-                student.id === studentId ? { ...student, registered: true } : student
+                student._id === studentId ? { ...student, isFaceSet: true } : student
             )
         );
     };
+
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007bff" />
+                <Text>Loading students...</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Register Students</Text>
             <FlatList
                 data={students}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => item._id}
                 renderItem={({ item }) => (
                     <View style={styles.studentRow}>
                         <Text style={styles.studentText}>{item.name}</Text>
                         <TouchableOpacity
-                            style={[styles.button, item.registered && styles.registeredButton]}
+                            style={[
+                                styles.button,
+                                item.isFaceSet && styles.registeredButton,
+                            ]}
                             onPress={() => handleRegister(item)}
+                            activeOpacity={0.7}
                         >
                             <Text style={styles.buttonText}>
-                                {item.registered ? 'Re-Register' : 'Register'}
+                                {item.isFaceSet ? 'Re-Register' : 'Register'}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -104,14 +165,19 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 15,
         borderRadius: 5,
-        backgroundColor: '#007bff', // Default Blue
+        backgroundColor: '#007bff',
     },
     registeredButton: {
-        backgroundColor: 'green', // Green for Re-Register
+        backgroundColor: 'green',
     },
     buttonText: {
         color: '#fff',
         fontSize: 16,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });
 

@@ -1,19 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from './Common/constants';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  // Check if a token exists and navigate to Home
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const token = await AsyncStorage.getItem('authToken');
+        if (token) {
+          navigation.replace('Home');
+        }
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+      }
+    };
+    checkAuthStatus();
+  }, [navigation]);
+
   const handleLogin = async () => {
-    Alert.alert('Success', 'Login Successful');
-    navigation.replace('Home');
-    // if (email === 'user@example.com' && password === 'password123') {
-    //   Alert.alert('Success', 'Login Successful');
-    //   navigation.replace('Home');
-    // } else {
-    //   Alert.alert('Error', 'Invalid email or password');
-    // }
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
+    const userData = { email, password };
+
+    try {
+      const response = await fetch(`${BASE_URL}/users/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        await AsyncStorage.setItem('authToken', result.token);
+        await AsyncStorage.setItem('user', JSON.stringify(result.user));
+
+        Alert.alert('Success', `Welcome, ${result.user.name}!`);
+        navigation.replace('Home');
+      } else {
+        Alert.alert('Error', result.message || 'Invalid email or password');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Network error. Please try again later.');
+      console.error('Login Error:', error);
+    }
   };
 
   return (
@@ -37,7 +77,6 @@ const LoginScreen = ({ navigation }) => {
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
 
-      {/* Sign Up Option */}
       <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
         <Text style={styles.signUpText}>Don't have an account? Sign Up</Text>
       </TouchableOpacity>

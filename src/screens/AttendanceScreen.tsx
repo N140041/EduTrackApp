@@ -1,30 +1,72 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, FlatList, Switch, StyleSheet, Pressable, Alert, Image } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, FlatList, Switch, StyleSheet, Pressable, Alert, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Camera, useCameraDevice } from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { BASE_URL } from './Common/constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const studentsData = [
-    { id: 'S001', name: 'John Doe' },
-    { id: 'S002', name: 'Jane Smith' },
-    { id: 'S003', name: 'Alice Johnson' },
-    { id: 'S004', name: 'Bob Williams' },
-];
+let BEARER_TOKEN = '';
 
 const AttendanceScreen = () => {
-    const [attendance, setAttendance] = useState({});
+    const [attendance, setAttendance] = useState<Record<string, boolean>>({});
+    const [studentsData, setStudentsData] = useState<any[]>([]);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
-    const [capturedPhoto, setCapturedPhoto] = useState(null);
+    const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const device = useCameraDevice('back');
-    const cameraRef = useRef(null);
+    const cameraRef = useRef<Camera>(null);
+    const { hasPermission, requestPermission } = useCameraPermission();
 
-    const toggleAttendance = (id) => {
-        setAttendance((prevState) => ({
-            ...prevState,
-            [id]: !prevState[id],
-        }));
+    useEffect(() => {
+        const checkAuthStatus = async () => {
+            try {
+                const token = await AsyncStorage.getItem('authToken');
+                if (token) {
+                    BEARER_TOKEN = token;
+                    fetchStudents();
+                }
+            } catch (error) {
+                console.error('Error checking auth status:', error);
+            }
+        };
+        checkAuthStatus();
+    }, []);
+
+    const toggleAttendance = (id: string,fromCam:boolean) => {
+        console.log('toggle' + id)
+        if(fromCam){
+            setAttendance((prev) => ({ ...prev, [id]: true }));
+
+        } else {
+            setAttendance((prev) => ({ ...prev, [id]: !prev[id] }));
+        }
     };
 
-    const handleSmartAttendance = () => {
+    const fetchStudents = async () => {
+        try {
+            const response = await fetch(`${BASE_URL}/users/students`, {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${BEARER_TOKEN}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) throw new Error('Failed to fetch students');
+            const data = await response.json();
+            setStudentsData(data);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to fetch students.');
+        }
+    };
+
+    const handleSmartAttendance = async () => {
+        if (!hasPermission) {
+            const permission = await requestPermission();
+            if (!permission) {
+                Alert.alert('Permission Denied', 'Camera access is required for attendance.');
+                return;
+            }
+        }
         setIsCameraOpen(true);
     };
 
@@ -32,8 +74,8 @@ const AttendanceScreen = () => {
         if (cameraRef.current) {
             try {
                 const photo = await cameraRef.current.takePhoto();
-                setCapturedPhoto(photo.path);
-            } catch (error) {
+                setCapturedPhoto(Platform.OS === 'android' ? `file://${photo.path}` : photo.path);
+            } catch {
                 Alert.alert('Error', 'Failed to capture image.');
             }
         }
@@ -41,71 +83,162 @@ const AttendanceScreen = () => {
 
     const handleUpload = async () => {
         if (!capturedPhoto) return;
-
+    
         const formData = new FormData();
-        formData.append('photo', {
-            uri: `file://${capturedPhoto}`,
+        formData.append('faceImage', {
+            uri: capturedPhoto,
             name: 'attendance.jpg',
             type: 'image/jpeg',
         });
-
+    
         try {
-            const response = await fetch('https://your-api.com/upload-photo', {
+            const response = await fetch(`${BASE_URL}/attendance/getUsers`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'multipart/form-data' },
+                headers: {
+                    Authorization: `Bearer ${BEARER_TOKEN}`,
+                },
                 body: formData,
             });
-
+    
             const result = await response.json();
-
+    
             if (response.ok) {
-                result.presentStudents.forEach((studentId) => {
-                    toggleAttendance(studentId);
-                });
+                console.log(JSON.stringify(result))
+                result.recognizedUsers.forEach((item: any) => toggleAttendance(item.userId,true));
                 Alert.alert('Success', 'Attendance updated successfully!');
                 setIsCameraOpen(false);
                 setCapturedPhoto(null);
             } else {
-                Alert.alert('Error', result.message || 'Failed to upload.');
+                throw new Error(result.message || 'Failed to upload.');
             }
         } catch (error) {
-            Alert.alert('Error', 'Network error, please try again later.');
+            console.error('Upload Error:', error);
+            Alert.alert('Offline Mode', error.message || 'Network error, please try again later.');
         }
     };
 
-    const handleSubmit = () => {
-        const presentStudents = studentsData.filter((student) => attendance[student.id]);
-        const absentStudents = studentsData.filter((student) => !attendance[student.id]);
+    // const handleSubmit = () => {
+    //     const present = studentsData.filter((student) => attendance[student._id]);
+    //     const absent = studentsData.filter((student) => !attendance[student._id]);
 
-        if (presentStudents.length === 0 && absentStudents.length === 0) {
+    //     if (present.length === 0 && absent.length === 0) {
+    //         Alert.alert('Error', 'Please mark attendance before submitting.');
+    //         return;
+    //     }
+
+    //     Alert.alert(
+    //         'Attendance Summary',
+    //         `✅ Present: ${present.map((s) => s.name).join(', ') || 'None'}\n❌ Absent: ${absent.map((s) => s.name).join(', ') || 'None'}`,
+    //         [{ text: 'OK' }]
+    //     );
+    // };
+
+    // const handleSubmit = async () => {
+    //     const present = studentsData.filter((student) => attendance[student._id]);
+    //     const absent = studentsData.filter((student) => !attendance[student._id]);
+    
+    //     if (present.length === 0 && absent.length === 0) {
+    //         Alert.alert('Error', 'Please mark attendance before submitting.');
+    //         return;
+    //     }
+    
+    //     // Prepare the payload for the backend
+    //     const payload = {
+    //         users: [
+    //             ...present.map((student) => ({ id: student._id, isPresent: "true" })),
+    //             ...absent.map((student) => ({ id: student._id, isPresent: "false" })),
+    //         ],
+    //     };
+    
+    //     try {
+    //         const response = await fetch('http://localhost:8000/api/attendance/mark', {
+    //             method: 'POST',
+    //             headers: {
+    //                 'Content-Type': 'application/json',
+    //             },
+    //             body: JSON.stringify(payload),
+    //         });
+    
+    //         const result = await response.json();
+    
+    //         if (response.ok) {
+    //             Alert.alert('Success', 'Attendance submitted successfully!');
+    //         } else {
+    //             throw new Error(result.message || 'Failed to submit attendance.');
+    //         }
+    //     } catch (error) {
+    //         console.error('Submit Error:', error);
+    //         Alert.alert('Error', 'Unable to submit attendance. Please try again.');
+    //     }
+    // };
+
+    const handleSubmit = () => {
+        const present = studentsData.filter((student) => attendance[student._id]);
+        const absent = studentsData.filter((student) => !attendance[student._id]);
+    
+        if (present.length === 0 && absent.length === 0) {
             Alert.alert('Error', 'Please mark attendance before submitting.');
             return;
         }
-
+    
+        // Prepare the payload for the backend
+        const payload = {
+            users: [
+                ...present.map((student) => ({ id: student._id, isPresent: "true" })),
+                ...absent.map((student) => ({ id: student._id, isPresent: "false" })),
+            ],
+        };
+    
+        // Show attendance summary alert
         Alert.alert(
             'Attendance Summary',
-            `✅ Present: ${presentStudents.map((s) => s.name).join(', ') || 'None'}\n❌ Absent: ${absentStudents.map((s) => s.name).join(', ') || 'None'}`,
-            [{ text: 'OK' }]
-        );
+            `✅ Present: ${present.map((s) => s.name).join(', ') || 'None'}\n❌ Absent: ${absent.map((s) => s.name).join(', ') || 'None'}\n \n Once you submit the attendance, further edits will not be allowed. Do you want to proceed?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Proceed',
+                    onPress: async () => {
+                        try {
+                            const response = await fetch(`${BASE_URL}/attendance/mark`, {
+                                method: 'POST',
+                                headers: {
+                                    Authorization: `Bearer ${BEARER_TOKEN}`,
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify(payload),
+                            });
 
-        // API Call Example
-        // submitAttendance({ present: presentStudents, absent: absentStudents });
+                            console.log('req' + JSON.stringify(payload))
+
+                            console.log('resp' + JSON.stringify(response))
+    
+                            const result = await response.json();
+    
+                            if (response.ok) {
+                                Alert.alert('Success', 'Attendance submitted successfully!');
+                            } else {
+                                throw new Error(result.message || 'Failed to submit attendance.');
+                            }
+                        } catch (error) {
+                            console.error('Submit Error:', error);
+                            Alert.alert('Error', error.message);
+                        }
+                    },
+                },
+            ]
+        );
     };
+    
+    
 
     return (
         <SafeAreaView style={styles.container}>
             {isCameraOpen ? (
                 <View style={styles.cameraContainer}>
                     {capturedPhoto ? (
-                        <Image source={{ uri: `file://${capturedPhoto}` }} style={styles.preview} />
+                        <Image source={{ uri: capturedPhoto }} style={styles.preview} />
                     ) : (
-                        <Camera
-                            ref={cameraRef}
-                            style={StyleSheet.absoluteFill}
-                            device={device}
-                            isActive={true}
-                            photo
-                        />
+                        <Camera ref={cameraRef} style={StyleSheet.absoluteFill} device={device} isActive={true} photo />
                     )}
 
                     <View style={styles.cameraControls}>
@@ -119,33 +252,28 @@ const AttendanceScreen = () => {
                                 </Pressable>
                             </>
                         ) : (
-                            <>
-                                <Pressable style={styles.button} onPress={handleCapture}>
-                                    <Text style={styles.buttonText}>Capture</Text>
-                                </Pressable>
-                                <Pressable style={styles.button} onPress={() => setIsCameraOpen(false)}>
-                                    <Text style={styles.buttonText}>Close Camera</Text>
-                                </Pressable>
-                            </>
+                            <Pressable style={styles.button} onPress={handleCapture}>
+                                <Text style={styles.buttonText}>Capture</Text>
+                            </Pressable>
                         )}
+                        <Pressable style={styles.button} onPress={() => setIsCameraOpen(false)}>
+                            <Text style={styles.buttonText}>Close Camera</Text>
+                        </Pressable>
                     </View>
                 </View>
             ) : (
                 <>
-                    <Pressable style={styles.button} onPress={handleSmartAttendance}>
-                        <Text style={styles.buttonText}>Take Attendance Smartly</Text>
+                    <Pressable style={styles.buttonFaceAttendance} onPress={handleSmartAttendance}>
+                        <Text style={styles.buttonTextFaceAttendance}>Take Face Attendance</Text>
                     </Pressable>
 
                     <FlatList
                         data={studentsData}
-                        keyExtractor={(item) => item.id}
+                        keyExtractor={(item) => item._id}
                         renderItem={({ item }) => (
                             <View style={styles.studentRow}>
-                                <Text style={styles.studentText}>{item.id} - {item.name}</Text>
-                                <Switch
-                                    value={attendance[item.id] || false}
-                                    onValueChange={() => toggleAttendance(item.id)}
-                                />
+                                <Text style={styles.studentText}>{item.name}</Text>
+                                <Switch value={attendance[item._id] || false} onValueChange={() => toggleAttendance(item._id,false)} />
                             </View>
                         )}
                     />
@@ -163,7 +291,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
-        padding: 20,
+        padding: 5,
     },
     cameraContainer: {
         flex: 1,
@@ -205,10 +333,24 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
     },
+    buttonFaceAttendance: {
+        backgroundColor: '#007bff',
+        marginBottom: 20,
+        padding: 16,
+        borderRadius: 8,
+        alignItems:'center'
+
+    },
+    buttonTextFaceAttendance: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
     submitButton: {
         marginTop: 20,
         backgroundColor: '#28a745',
-        padding: 10,
+        padding: 16,
+        alignItems:'center',
         borderRadius: 8,
     },
     submitButtonText: {
